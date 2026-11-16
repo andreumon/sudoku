@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f6f5f1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <title>Sudoku</title>
+    <script>
+        // Applica il tema prima del primo disegno, per evitare lampi di colore.
+        (function () {
+            var t = null;
+            try { t = localStorage.getItem('sudoku.theme'); } catch (e) { }
+            if (t !== 'light' && t !== 'dark')
+                t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.dataset.theme = t;
+            var meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.content = t === 'dark' ? '#111215' : '#f6f5f1';
+        })();
+    </script>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div class="app" id="app"></div>
+    <script src="puzzles.js"></script>
+    <script src="logic.js"></script>
+    <script src="ocr.js"></script>
+    <script src="app.js"></script>
+    <script>
+        // Funzionamento senza rete e installazione: serve una pagina servita in https.
+        if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js');
+    </script>
+</body>
+
+</html>
