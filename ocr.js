@@ -172,7 +172,7 @@
     /** Il gruppo di linee parallele, con gli stessi estremi, che disegna un quadrato. */
     function squareFrom(lines, B) {
         const tol = B * .025;
-        let best = null;
+        let best = null, third = null;
         for (const seed of lines) {
             const group = lines.filter(l => Math.abs(l.from - seed.from) < tol && Math.abs(l.to - seed.to) < tol);
             if (group.length < 2) continue;
@@ -182,13 +182,20 @@
             for (const a of group)
                 for (const b of group) {
                     const span = b.end - a.pos;
+                    // griglie disegnate con le sole quattro linee dei riquadri: due linee distanti un terzo del lato
+                    if (span > 0 && Math.abs(span - side / 3) < side * .03) {
+                        const mid = (a.pos + a.end + b.pos + b.end) / 4;
+                        if (!third || side > third.side) third = { inside: 2, side, from, to, start: Math.round(mid - side / 2), end: Math.round(mid + side / 2) };
+                    }
                     if (span <= 0 || Math.abs(span - side) > side * .06) continue;
                     const inside = group.filter(l => l.pos >= a.pos && l.end <= b.end).length;
                     if (!best || inside > best.inside || (inside === best.inside && side > best.side))
                         best = { inside, side, from, to, start: a.pos, end: b.end };
                 }
         }
-        return best;
+        // un quadrato completo vince se ha molte linee; altrimenti si accetta lo schema a quattro linee
+        if (best && (best.inside >= 4 || !third || best.side >= third.side * .95)) return best;
+        return third;
     }
 
     const median = a => { const s = a.slice().sort((x, y) => x - y); return s[s.length >> 1]; };
@@ -313,7 +320,7 @@
             for (let c = 0; c < 9; c++) {
                 const res = readCell(data, W, g.x + c * cw, g.y + r * ch, cw, ch);
                 grid[r * 9 + c] = res.digit;
-                if (res.digit && (res.score < .8 || res.margin < .04)) doubt.push(r * 9 + c);
+                if (res.digit && (res.score < .78 || res.margin < .02)) doubt.push(r * 9 + c);
             }
 
         const out = document.createElement('canvas');

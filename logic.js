@@ -480,6 +480,12 @@
     const inUnit = u => u < 9 ? `nella riga ${u + 1}` : u < 18 ? `nella colonna ${u - 8}` : `nel riquadro ${BOX_NAMES[u - 18]}`;
     const kindOf = u => u < 9 ? 'riga' : u < 18 ? 'colonna' : 'riquadro';
     const list = a => a.length <= 1 ? a.join('') : a.slice(0, -1).join(', ') + ' e ' + a[a.length - 1];
+    const vowel = d => d === 1 || d === 8;
+    const il = d => vowel(d) ? "l'" + d : 'il ' + d;
+    const Il = d => vowel(d) ? "L'" + d : 'Il ' + d;
+    const al = d => vowel(d) ? "all'" + d : 'al ' + d;
+    const del = d => vowel(d) ? "dell'" + d : 'del ' + d;
+    const sul = d => vowel(d) ? "sull'" + d : 'sul ' + d;
 
     function lookIdeas(g) {
         const out = [];
@@ -524,9 +530,9 @@
             else if (perDigit[d] >= 6) heavy.push(d);
         }
         const used = 9 - missing.length;
-        if (missing.length === 1) out.push(`Tra i numeri di partenza il ${missing[0]} non compare mai: tutte e nove le copie vanno dedotte.`);
+        if (missing.length === 1) out.push(`Tra i numeri di partenza ${il(missing[0])} non compare mai: tutte e nove le copie vanno dedotte.`);
         else if (missing.length > 1) out.push(`I numeri di partenza usano solo ${used} cifre diverse: ${list(missing)} non compaiono mai.`);
-        if (heavy.length === 1) out.push(`Il ${heavy[0]} è già quasi tutto sulla griglia: è il filo più corto da tirare.`);
+        if (heavy.length === 1) out.push(`${Il(heavy[0])} è già quasi tutto sulla griglia: è il filo più corto da tirare.`);
         else if (heavy.length) out.push(`Le cifre ${list(heavy)} sono già quasi tutte sulla griglia: sono i fili più corti da tirare.`);
 
         const per = (from) => { const n = []; for (let u = 0; u < 9; u++) n.push(UNITS[from + u].filter(has).length); return n; };
@@ -594,7 +600,7 @@
         }
         const top = byDigit.indexOf(Math.max(...byDigit));
         if (byDigit[top] >= 3)
-            out.push(`Le prime deduzioni ruotano attorno al ${top}: segui dove può stare, riquadro per riquadro.`);
+            out.push(`Le prime deduzioni ruotano attorno ${al(top)}: segui dove può stare, riquadro per riquadro.`);
         const bandNames = ['nella fascia alta', 'nella fascia centrale', 'nella fascia bassa'];
         const stackNames = ['nelle tre colonne di sinistra', 'nelle tre colonne centrali', 'nelle tre colonne di destra'];
         const bMax = byBand.indexOf(Math.max(...byBand)), sMax = byStack.indexOf(Math.max(...byStack));
@@ -622,10 +628,10 @@
         hTriple: s => `Tre cifre, ${inUnit(s.unit)}, possono stare solo in tre caselle: è una terna nascosta in mezzo ad altri candidati.`,
         nQuad: s => `Quattro caselle ${inUnit(s.unit)} si spartiscono quattro sole cifre.`,
         hQuad: s => `Quattro cifre, ${inUnit(s.unit)}, hanno solo quattro caselle a disposizione.`,
-        xwing: s => `Segui il ${s.digits[0]}: in due ${s.unit < 9 ? 'righe' : 'colonne'} ha due soli posti, allineati sulle stesse due ${s.unit < 9 ? 'colonne' : 'righe'}. I quattro angoli formano un rettangolo: cosa implica per quelle ${s.unit < 9 ? 'colonne' : 'righe'}?`,
-        sword: s => `Segui il ${s.digits[0]}: tre ${s.unit < 9 ? 'righe' : 'colonne'} lo confinano nelle stesse tre ${s.unit < 9 ? 'colonne' : 'righe'}. È lo stesso ragionamento del rettangolo, allargato a tre linee.`,
-        jelly: s => `Segui il ${s.digits[0]}: quattro ${s.unit < 9 ? 'righe' : 'colonne'} lo confinano nelle stesse quattro ${s.unit < 9 ? 'colonne' : 'righe'}.`,
-        turbot: s => `Segui solo il ${s.digits[0]}: ci sono due punti in cui ha due soli posti. Se le due coppie si toccano, le estremità lontane non possono essere entrambe sbagliate.`,
+        xwing: s => `Segui ${il(s.digits[0])}: in due ${s.unit < 9 ? 'righe' : 'colonne'} ha due soli posti, allineati sulle stesse due ${s.unit < 9 ? 'colonne' : 'righe'}. I quattro angoli formano un rettangolo: cosa implica per quelle ${s.unit < 9 ? 'colonne' : 'righe'}?`,
+        sword: s => `Segui ${il(s.digits[0])}: tre ${s.unit < 9 ? 'righe' : 'colonne'} lo confinano nelle stesse tre ${s.unit < 9 ? 'colonne' : 'righe'}. È lo stesso ragionamento del rettangolo, allargato a tre linee.`,
+        jelly: s => `Segui ${il(s.digits[0])}: quattro ${s.unit < 9 ? 'righe' : 'colonne'} lo confinano nelle stesse quattro ${s.unit < 9 ? 'colonne' : 'righe'}.`,
+        turbot: s => `Segui solo ${il(s.digits[0])}: ci sono due punti in cui ha due soli posti. Se le due coppie si toccano, le estremità lontane non possono essere entrambe sbagliate.`,
         xywing: s => `Tre caselle con due candidati ciascuna: una fa da perno ${inUnit(s.unit)}, le altre due da ali. Qualunque cifra prenda il perno, una delle ali ne prende una certa: chi vede entrambe le ali?`,
         xyzwing: s => `Un perno con tre candidati ${inUnit(s.unit)} e due ali con due candidati presi tra quei tre: una cifra comune finisce per forza in una delle tre caselle.`,
         wwing: () => 'Due caselle lontane con la stessa coppia di candidati, collegate da una cifra che in una linea ha due soli posti: le due caselle non possono avere entrambe quella cifra.',
@@ -674,7 +680,175 @@
         ];
     }
 
-    const api = { analyze, grade, ideas, bruteForce, LEVELS, TECH };
+    // ------------------------------------------------------------------
+    // Suggerimenti: i prossimi passi logici a partire dalla griglia attuale
+    // ------------------------------------------------------------------
+
+    /**
+     * Passi fino alla prossima cifra scrivibile: eventuali osservazioni sui candidati, poi la cifra.
+     * `values` sono le cifre presenti ora sulla griglia (corrette); `solution` serve solo come ripiego.
+     */
+    function nextSteps(values, solution) {
+        const s = makeState(values);
+        const steps = [];
+        for (let guard = 0; guard < 40; guard++) {
+            const before = s.c.slice();
+            let step = null;
+            for (const find of ORDER) { step = find(s); if (step) break; }
+            if (!step) {
+                let best = -1, bestN = 10;
+                for (let i = 0; i < 81; i++) {
+                    if (s.v[i]) continue;
+                    const n = count(s.c[i]);
+                    if (n < bestN) { bestN = n; best = i; }
+                }
+                if (best < 0) break;
+                step = { tech: 'trial', unit: 18 + BOX(best), cell: best, digit: solution[best] };
+            }
+            step.elim = [];
+            for (let i = 0; i < 81; i++) if (before[i] !== s.c[i]) step.elim.push([i, before[i] & ~s.c[i]]);
+            steps.push(step);
+            if (step.cell != null) break;
+        }
+        return prune(steps);
+    }
+
+    /** Vero se le eliminazioni del passo `k` possono servire al passo `j` (criterio prudente). */
+    function feeds(k, j) {
+        if (j.cell != null) {
+            if (j.tech === 'naked' || j.tech === 'full' || j.tech === 'trial') return k.elim.some(e => e[0] === j.cell);
+            return k.elim.some(e => (e[1] & (1 << j.digit)) && UNITS[j.unit].includes(e[0]));
+        }
+        const cells = new Set(j.cells);
+        const around = new Set(UNITS[j.unit]);
+        if (j.unit2 != null) for (const i of UNITS[j.unit2]) around.add(i);
+        if (/xwing|sword|jelly|turbot|wing|rect/.test(j.tech))
+            for (const c of j.cells) { for (const i of UNITS[ROW(c)]) around.add(i); for (const i of UNITS[9 + COL(c)]) around.add(i); for (const i of UNITS[18 + BOX(c)]) around.add(i); }
+        let mask = 0;
+        if (/^n(Pair|Triple|Quad)$/.test(j.tech)) mask = 0;
+        else if (/wing|rect/.test(j.tech)) mask = ALL;
+        else for (const d of j.digits) mask |= 1 << d;
+        return k.elim.some(e => cells.has(e[0]) || (around.has(e[0]) && (e[1] & mask)));
+    }
+
+    /** Tiene solo le osservazioni da cui la cifra finale dipende davvero. */
+    function prune(steps) {
+        const keep = steps.map(() => false);
+        keep[steps.length - 1] = true;
+        for (let k = steps.length - 2; k >= 0; k--)
+            for (let j = k + 1; j < steps.length; j++)
+                if (keep[j] && feeds(steps[k], steps[j])) { keep[k] = true; break; }
+        return steps.filter((_, k) => keep[k]);
+    }
+
+    const ofUnit = u => u < 9 ? `della riga ${u + 1}` : u < 18 ? `della colonna ${u - 8}` : `del riquadro ${BOX_NAMES[u - 18]}`;
+    const SIZE = { nPair: 'Coppia', hPair: 'Coppia', nTriple: 'Terna', hTriple: 'Terna', nQuad: 'Quaterna', hQuad: 'Quaterna' };
+    const FISH = { xwing: 'X-Wing', sword: 'Swordfish', jelly: 'Jellyfish' };
+
+    /** Testo di un passo: `precise` falso = che cosa cercare e dove; vero = le caselle e la conseguenza. */
+    function describeStep(st, precise) {
+        const d = st.digit || (st.digits && st.digits[0]);
+        const ds = st.digits ? list(st.digits) : '';
+        switch (st.tech) {
+            case 'full': return precise ? `È l'ultima casella libera ${ofUnit(st.unit)}: manca solo ${il(d)}.` : `C'è un'ultima casella libera ${inUnit(st.unit)}.`;
+            case 'hiddenB': case 'hiddenL': return precise ? `${inUnit(st.unit)[0].toUpperCase() + inUnit(st.unit).slice(1)} ${il(d)} può stare solo qui.` : `Una cifra ha un solo posto ${inUnit(st.unit)}.`;
+            case 'naked': return precise ? `Questa casella vede già tutte le altre cifre: resta solo ${il(d)}.` : `A una casella ${ofUnit(st.unit)} resta una sola cifra possibile.`;
+            case 'point': return precise ? `Nel ${unitName(st.unit)} ${il(d)} può stare solo nelle caselle evidenziate, tutte sulla ${unitName(st.unit2)}: toglilo dal resto ${ofUnit(st.unit2)}.` : `Candidati bloccati: segui ${il(d)} nel ${unitName(st.unit)}.`;
+            case 'claim': return precise ? `Lungo la ${unitName(st.unit)} ${il(d)} sta solo nelle caselle evidenziate, tutte nel ${unitName(st.unit2)}: toglilo dal resto ${ofUnit(st.unit2)}.` : `Candidati bloccati: segui ${il(d)} lungo la ${unitName(st.unit)}.`;
+            case 'nPair': case 'nTriple': case 'nQuad': return precise ? `Le caselle evidenziate ammettono solo ${ds}: togli queste cifre dalle altre caselle ${ofUnit(st.unit)}.` : `${SIZE[st.tech]} nuda ${inUnit(st.unit)}.`;
+            case 'hPair': case 'hTriple': case 'hQuad': return precise ? `${ds} possono stare solo nelle caselle evidenziate ${inUnit(st.unit)}: lì cancella ogni altro candidato.` : `${SIZE[st.tech]} nascosta ${inUnit(st.unit)}.`;
+            case 'xwing': case 'sword': case 'jelly': {
+                const base = st.unit < 9 ? 'righe' : 'colonne', cover = st.unit < 9 ? 'colonne' : 'righe';
+                return precise ? `Nelle ${base} delle caselle evidenziate ${il(d)} occupa sempre le stesse ${cover}: toglilo da quelle ${cover} in tutte le altre caselle.` : `${FISH[st.tech]} ${sul(d)}.`;
+            }
+            case 'turbot': return precise ? `Le caselle evidenziate formano due coppie obbligate ${del(d)} collegate tra loro: una delle due estremità lo contiene di sicuro, quindi toglilo dalle caselle che le vedono entrambe.` : `Catena corta ${sul(d)} (grattacielo o aquilone).`;
+            case 'xywing': return precise ? `Perno e due ali evidenziati: togli ${il(d)} dalle caselle che vedono entrambe le ali.` : `XY-Wing con il perno ${inUnit(st.unit)}.`;
+            case 'xyzwing': return precise ? `Perno e due ali evidenziati: togli ${il(d)} dalle caselle che vedono tutte e tre.` : `XYZ-Wing con il perno ${inUnit(st.unit)}.`;
+            case 'wwing': return precise ? `Due caselle con la stessa coppia, unite da una cifra che in una linea ha due soli posti: togli ${il(d)} dalle caselle che le vedono entrambe.` : 'W-Wing: due caselle lontane con la stessa coppia.';
+            case 'rect': return precise ? `Tre angoli del rettangolo ammettono solo ${ds}: il quarto non può contenerle, altrimenti le soluzioni sarebbero due.` : `Rettangolo di unicità: guarda ${inUnit(st.unit)}.`;
+            default: return precise ? 'Posso solo indicarti la casella.' : 'Qui non trovo una tecnica a schema fisso: serve una catena lunga.';
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Generatore
+    // ------------------------------------------------------------------
+
+    /** Quanti numeri di partenza per livello. Il livello vero lo decide `genLevel` sulle tecniche richieste. */
+    // Taratura: "hard" segue i campioni di Sudoku - The Clean One (26-27 numeri, soli candidati bloccati).
+    const GEN = { easy: [36, 40], medium: [30, 34], hard: [25, 28], expert: [22, 25] };
+
+    function shuffled(n) {
+        const a = Array.from({ length: n }, (_, i) => i);
+        for (let i = n - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; }
+        return a;
+    }
+
+    function randomSolution() {
+        const g = new Array(81).fill(0);
+        const rows = new Array(9).fill(0), cols = new Array(9).fill(0), boxes = new Array(9).fill(0);
+        (function fill() {
+            let best = -1, bestMask = 0, bestN = 10;
+            for (let i = 0; i < 81; i++) {
+                if (g[i]) continue;
+                const m = ALL & ~(rows[ROW(i)] | cols[COL(i)] | boxes[BOX(i)]);
+                const k = count(m);
+                if (k < bestN) { best = i; bestMask = m; bestN = k; if (k <= 1) break; }
+            }
+            if (best < 0) return true;
+            const r = ROW(best), c = COL(best), b = BOX(best);
+            for (const k of shuffled(9)) {
+                const d = k + 1, bit = 1 << d;
+                if (!(bestMask & bit)) continue;
+                g[best] = d; rows[r] |= bit; cols[c] |= bit; boxes[b] |= bit;
+                if (fill()) return true;
+                rows[r] &= ~bit; cols[c] &= ~bit; boxes[b] &= ~bit; g[best] = 0;
+            }
+            return false;
+        })();
+        return g;
+    }
+
+    /** Livello di un puzzle generato: conta solo la tecnica più difficile che serve davvero. */
+    function genLevel(a) {
+        if (a.counts.trial) return null;            // niente puzzle che richiedano tentativi
+        if (a.maxTier >= 3) return 'expert';        // coppie, terne, X-Wing, catene, wing
+        if (a.maxTier === 2) return 'hard';         // candidati bloccati
+        if (a.maxTier === 1 || a.level >= .45) return 'medium';
+        return 'easy';
+    }
+
+    /**
+     * Un tentativo di generazione: griglia completa a caso, numeri tolti a coppie simmetriche
+     * finché la soluzione resta unica. Restituisce la griglia solo se è del livello chiesto.
+     */
+    function generateAttempt(level) {
+        const g = randomSolution();
+        const [lo, hi] = GEN[level];
+        const goal = lo + Math.floor(Math.random() * (hi - lo + 1));
+        let clues = 81;
+        for (const i of shuffled(41)) {
+            if (clues <= goal) break;
+            const j = 80 - i, a = g[i], b = g[j];
+            g[i] = 0; g[j] = 0;
+            if (bruteForce(g, 2).count === 1) clues -= i === j ? 1 : 2;
+            else { g[i] = a; g[j] = b; }
+        }
+        // se la simmetria non basta per scendere al numero voluto, si prosegue una casella alla volta
+        for (const i of shuffled(81)) {
+            if (clues <= goal) break;
+            if (!g[i]) continue;
+            const a = g[i];
+            g[i] = 0;
+            if (bruteForce(g, 2).count === 1) clues--;
+            else g[i] = a;
+        }
+        if (clues > hi) return null;
+        const a = analyze(g);
+        return a.valid && genLevel(a) === level ? g : null;
+    }
+
+    const api = { analyze, grade, ideas, bruteForce, nextSteps, describeStep, generateAttempt, genLevel, LEVELS, TECH };
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
     else root.SudokuLogic = api;
 

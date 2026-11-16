@@ -9,6 +9,9 @@
     // Geometria della griglia e risolutore (Solver.cs)
     // =====================================================================
 
+    /** Mostrata in fondo alle impostazioni: serve a capire quale versione sta girando sul telefono. */
+    const APP_VERSION = '16 nov 2026 · 7';
+
     const ALL_DIGITS = 0b11_1111_1110;
     const row = i => (i / 9) | 0;
     const col = i => i % 9;
@@ -139,6 +142,7 @@
                 source: String(p.source || ''),
                 idea: String(p.idea || ''),
                 imported: !!p.imported,
+                generated: !!p.generated,
                 grid,
                 solution,
                 clueCount: grid.filter(v => v !== 0).length,
@@ -153,7 +157,8 @@
             find: id => list.find(p => p.id === id) || null,
             /** I puzzle d'autore di un livello (quelli importati stanno in una sezione a parte). */
             byLevel: level => list.filter(p => p.difficulty === level && !p.imported),
-            imported: () => list.filter(p => p.imported),
+            imported: () => list.filter(p => p.imported && !p.generated),
+            generated: () => list.filter(p => p.generated),
         };
     }
 
@@ -201,7 +206,8 @@
             this.done = false;
             this.undoStack = [];
             this.redoStack = [];
-            this.hintCell = -1;
+            /** Suggerimento in corso: { steps, i, precise } — i passi logici fino alla prossima cifra. */
+            this.plan = null;
 
             for (let i = 0; i < 81; i++) {
                 this.given[i] = puzzle.grid[i] !== 0;
@@ -282,7 +288,8 @@
             if (before.sameAs(this.board)) return false;
             this.undoStack.push(before);
             this.redoStack.length = 0;
-            this.hintCell = -1;
+            // il suggerimento in corso resta valido finché cambiano solo note e colori
+            if (before.values.some((v, i) => v !== this.board.values[i])) this.plan = null;
             this.checkDone();
             return true;
         }
@@ -347,7 +354,7 @@
             if (!this.canUndo) return false;
             this.redoStack.push(this.board);
             this.board = this.undoStack.pop();
-            this.hintCell = -1;
+            this.plan = null;
             return true;
         }
 
@@ -355,7 +362,7 @@
             if (!this.canRedo) return false;
             this.undoStack.push(this.board);
             this.board = this.redoStack.pop();
-            this.hintCell = -1;
+            this.plan = null;
             this.checkDone();
             return true;
         }
@@ -365,7 +372,7 @@
             for (let i = 0; i < 81; i++) this.board.values[i] = this.puzzle.grid[i];
             this.undoStack.length = 0;
             this.redoStack.length = 0;
-            this.hintCell = -1;
+            this.plan = null;
             this.seconds = 0;
             this.hints = 0;
             this.ideas = 0;
@@ -429,78 +436,62 @@
         }
 
         /**
-         * Suggerimento in due tempi: la prima pressione indica la casella e il perché,
-         * la seconda sulla stessa casella scrive la cifra.
+         * Suggerimento per tecnica, un passo per pressione: prima che cosa cercare e dove,
+         * poi le caselle coinvolte e la conseguenza; solo alla fine, se richiesto, la cifra.
+         * Restituisce { text, more } dove `more` dice se c'è ancora qualcosa da mostrare.
          */
         hint() {
-            if (this.done) return 'Il puzzle è già risolto.';
+            if (this.done) return { text: 'Il puzzle è già risolto.', more: false };
 
             const wrong = this.wrongCells();
             if (wrong.length > 0) {
                 this.selectOnly(wrong[0]);
-                this.hintCell = -1;
-                return wrong.length === 1
-                    ? 'Questa cifra non è corretta: conviene sistemarla prima di proseguire.'
-                    : `Ci sono ${wrong.length} cifre non corrette: questa è la prima.`;
+                this.plan = null;
+                return {
+                    text: wrong.length === 1
+                        ? 'Questa cifra non è corretta: conviene sistemarla prima di proseguire.'
+                        : `Ci sono ${wrong.length} cifre non corrette: questa è la prima.`,
+                    more: false,
+                };
             }
 
-            const values = this.board.values;
-            let cell = -1;
-            let reason = '';
-
-            // 1. unica cifra possibile nella casella
-            for (let i = 0; i < 81 && cell < 0; i++) {
-                if (values[i] !== 0) continue;
-                if (popCount(this.candidates(i)) === 1) {
-                    cell = i;
-                    reason = 'In questa casella è rimasta una sola cifra possibile.';
-                }
-            }
-
-            // 2. unico posto possibile per una cifra in un'unità
-            for (let u = 0; u < 27 && cell < 0; u++) {
-                for (let d = 1; d <= 9 && cell < 0; d++) {
-                    let spot = -1, spots = 0, placed = false;
-                    for (const i of UNITS[u]) {
-                        if (values[i] === d) { placed = true; break; }
-                        if (values[i] === 0 && (this.candidates(i) & (1 << d))) { spot = i; spots++; }
-                    }
-                    if (placed || spots !== 1) continue;
-                    cell = spot;
-                    const where = u < 9 ? 'in questa riga' : u < 18 ? 'in questa colonna' : 'in questo riquadro';
-                    reason = `Una cifra ha un solo posto possibile ${where}: è questa casella.`;
-                }
-            }
-
-            // 3. nessun passo semplice: si rivela la casella scelta, o quella con meno possibilità
-            if (cell < 0) {
-                if (this.selectedCount === 1 && values[this.cursor] === 0) cell = this.cursor;
-                else {
-                    let bestN = 99;
-                    for (let i = 0; i < 81; i++) {
-                        if (values[i] !== 0) continue;
-                        const n = popCount(this.candidates(i));
-                        if (n < bestN) { bestN = n; cell = i; }
-                    }
-                }
-                reason = 'Qui serve una tecnica più avanzata.';
-            }
-
-            if (this.hintCell === cell) {
-                const target = cell;
-                this.selectOnly(target);
-                this.mutate(b => {
-                    b.values[target] = this.puzzle.solution[target];
-                    const bit = 1 << b.values[target];
-                    for (const p of PEERS[target]) { b.corner[p] &= ~bit; b.center[p] &= ~bit; }
-                });
+            const Logic = window.SudokuLogic;
+            let intro = '';
+            if (!this.plan) {
+                this.plan = { steps: Logic.nextSteps(this.board.values, this.puzzle.solution), i: 0, precise: false, write: false };
                 this.hints++;
-                return 'Cifra rivelata.';
+                const extra = this.plan.steps.length - 1;
+                if (extra > 0) intro = extra === 1
+                    ? 'Prima della prossima cifra serve un\'osservazione sui candidati. '
+                    : `Prima della prossima cifra servono ${extra} osservazioni sui candidati. `;
             }
+            const p = this.plan, step = p.steps[p.i];
+            const placing = step.cell != null;
 
-            this.selectOnly(cell);
-            this.hintCell = cell;
-            return reason + ' Premi di nuovo per rivelarla.';
+            if (p.write) {
+                this.selectOnly(step.cell);
+                this.mutate(b => {
+                    b.values[step.cell] = this.puzzle.solution[step.cell];
+                    const bit = 1 << b.values[step.cell];
+                    b.corner[step.cell] = b.center[step.cell] = 0;
+                    for (const peer of PEERS[step.cell]) { b.corner[peer] &= ~bit; b.center[peer] &= ~bit; }
+                });
+                this.plan = null;
+                return { text: 'Cifra scritta.', more: false, changed: true };
+            }
+            if (!p.precise) {
+                p.precise = true;
+                this.clearSelection();
+                return { text: intro + Logic.describeStep(step, false), more: true, next: 'Mostra dove' };
+            }
+            // caselle coinvolte
+            this.selected.fill(false);
+            for (const i of (placing ? [step.cell] : step.cells)) this.selected[i] = true;
+            this.cursor = placing ? step.cell : step.cells[0];
+            const text = Logic.describeStep(step, true);
+            if (placing) { p.write = true; return { text, more: true, next: 'Scrivi la cifra' }; }
+            p.i++; p.precise = false;
+            return { text, more: true, next: 'Passo successivo' };
         }
     }
 
@@ -610,6 +601,8 @@
         showTimer: true,
         level: '',
         name: '',
+        source: 'authored', // authored | generated | both
+        genCount: 0,
     };
 
     let imported = storage.load(IMPORTED_KEY) || [];
@@ -677,6 +670,7 @@
 
     function openPuzzle(puzzle, saveCurrent = true) {
         if (saveCurrent) { save(); active = true; }
+        hideHint();
         game = new Game(puzzle, storage.load(gameKey(puzzle.id)));
         settings.level = puzzle.difficulty;
         flagged.clear();
@@ -691,14 +685,53 @@
         render();
     }
 
-    function setLevel(level) {
-        if (!game || level === game.puzzle.difficulty) return;
-        openPuzzle(pickForLevel(level));
+    // ---------- puzzle generati ----------
+
+    let generating = null; // livello in corso di generazione, se c'è
+
+    /**
+     * Genera un puzzle del livello chiesto e lo apre. Lavora a piccoli passi (un tentativo alla volta)
+     * per non bloccare l'interfaccia: in media bastano pochi tentativi da qualche millisecondo.
+     */
+    function openGenerated(level) {
+        if (generating) return;
+        generating = level;
+        const started = Date.now();
+        let told = false;
+        const tick = () => {
+            const t0 = Date.now();
+            let grid = null;
+            while (!grid && Date.now() - t0 < 14) grid = Logic.generateAttempt(level);
+            if (!grid) {
+                if (!told && Date.now() - started > 350) { told = true; showToast('Genero un puzzle…'); }
+                return setTimeout(tick, 0);
+            }
+            generating = null;
+            const givens = grid.join('');
+            const id = 'gen-' + hashId(givens).slice(1);
+            settings.genCount = (settings.genCount | 0) + 1;
+            // i generati mai toccati non si accumulano
+            imported = imported.filter(p => !p.generated || p.id in progress || likes[p.id] || (game && p.id === game.puzzle.id && game.hasProgress));
+            imported.push({
+                id, title: 'Generato n. ' + settings.genCount, author: '', difficulty: level, givens,
+                imported: true, generated: true, date: new Date().toISOString(),
+            });
+            storage.save(IMPORTED_KEY, imported);
+            if (game && !imported.some(p => p.id === game.puzzle.id) && game.puzzle.generated) {
+                storage.remove(gameKey(game.puzzle.id));
+                game = null;
+            }
+            rebuildLibrary();
+            openPuzzle(library.find(id));
+        };
+        setTimeout(tick, 0);
     }
 
-    function randomPuzzle() {
-        if (!game) return;
-        const others = library.byLevel(settings.level).filter(p => p.id !== game.puzzle.id);
+    /** Un nuovo puzzle del livello, secondo la fonte scelta nelle impostazioni. */
+    function newPuzzle(level, excludeId) {
+        const src = settings.source;
+        if (src === 'generated' || (src === 'both' && Math.random() < .5)) return openGenerated(level);
+        const others = library.byLevel(level).filter(p => p.id !== excludeId);
         const fresh = others.filter(p => !isDone(p));
         const pool = fresh.length > 0 ? fresh : others;
         if (pool.length === 0) {
@@ -707,6 +740,20 @@
             return;
         }
         openPuzzle(pool[Math.floor(Math.random() * pool.length)]);
+    }
+
+    function setLevel(level) {
+        if (!game || level === game.puzzle.difficulty) return;
+        if (settings.source === 'generated') {
+            const open = library.generated().find(p => p.difficulty === level && !isDone(p));
+            return open ? openPuzzle(open) : openGenerated(level);
+        }
+        openPuzzle(pickForLevel(level));
+    }
+
+    function randomPuzzle() {
+        if (!game) return;
+        newPuzzle(settings.level, game.puzzle.id);
     }
 
     function restart() {
@@ -773,6 +820,7 @@
             completeBefore = now;
             if (game.done) completed();
         }
+        if (!game.plan && els.app.querySelector('.hintbar:not(.updatebar) .primary')) hideHint();
         render();
         if (closed.length && !game.done)
             playWave(closed, game.cursor >= 0 ? game.cursor : lastCell >= 0 ? lastCell : 40);
@@ -797,8 +845,10 @@
         }, 1300);
     }
 
+    const SOURCES = ['authored', 'generated', 'both'];
+    const SOURCE_NAMES = ["D'autore", 'Generati', 'Entrambi'];
     const isLiked = p => !!likes[p.id];
-    const byline = p => p.imported ? 'importato da screenshot' : 'di ' + esc(p.author);
+    const byline = p => p.generated ? 'generato dal computer' : p.imported ? 'importato da screenshot' : 'di ' + esc(p.author);
 
     function toggleLike() {
         const id = game.puzzle.id;
@@ -898,10 +948,28 @@
 
     function setMode(m) { mode = m; render(); }
 
+    /** Il suggerimento resta visibile in una barra con il pulsante per il passo successivo. */
     function hint() {
-        const before = game.hints;
-        showToast(game.hint());
-        afterAction(game.hints !== before);
+        const r = game.hint();
+        active = true;
+        let bar = els.app.querySelector('.hintbar:not(.updatebar)');
+        if (!bar) {
+            bar = h('div', 'hintbar');
+            bar.setAttribute('role', 'status');
+            els.app.appendChild(bar);
+        }
+        bar.innerHTML = `<p>${esc(r.text)}</p><div class="hint-actions">` +
+            (r.more ? `<button type="button" class="primary" data-action="hint">${esc(r.next)}</button>` : '') +
+            `<button type="button" class="ghost" data-action="hint-close">Chiudi</button></div>`;
+        if (!r.more) setTimeout(() => { if (!game.plan) hideHint(); }, 2600);
+        save();
+        afterAction(!!r.changed);
+    }
+
+    function hideHint() {
+        const bar = els.app && els.app.querySelector('.hintbar:not(.updatebar)');
+        if (bar) bar.remove();
+        if (game) game.plan = null;
     }
 
     function verify() {
@@ -1036,7 +1104,7 @@
     function buildCaption() {
         const p = game.puzzle;
         els.caption = fresh(els.caption);
-        const author = p.imported ? 'importato'
+        const author = p.generated ? 'generato' : p.imported ? 'importato'
             : p.sourceUrl ? `di <a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(p.author)}${icon('link')}</a>`
             : 'di ' + esc(p.author);
         els.caption.innerHTML = `<span class="title">${esc(p.title)}</span><span class="by">${author}</span>` +
@@ -1188,9 +1256,14 @@
             if (padShowsColor !== showColor)
                 key.innerHTML = showColor
                     ? `<span class="swatch" style="background:var(--c${d})"></span>`
-                    : `<span class="num">${d}</span>`;
+                    : `<span class="num">${d}</span><small class="left"></small>`;
             key.classList.toggle('full', mode === MODE.Digit && counts[d] >= 9);
             key.classList.toggle('armed', armed === d);
+            if (!showColor) {
+                // quante copie di questa cifra mancano ancora sulla griglia
+                const left = key.querySelector('.left'), text = String(Math.max(0, 9 - counts[d]));
+                if (left.textContent !== text) left.textContent = text;
+            }
         });
         padShowsColor = showColor;
 
@@ -1248,6 +1321,12 @@
                 </label>`;
             sheet.innerHTML = `
                 <div class="sheet-head"><h2>Impostazioni</h2>${closeBtn}</div>
+                <div class="source">
+                    <span><b>Fonte dei puzzle</b><small>Da dove arrivano i nuovi puzzle.</small></span>
+                    <div class="seg" style="--n:3;--idx:${Math.max(0, SOURCES.indexOf(settings.source))}">
+                        ${SOURCES.map((s, k) => `<button type="button" class="${s === settings.source ? 'on' : ''}" data-source="${s}">${SOURCE_NAMES[k]}</button>`).join('')}
+                    </div>
+                </div>
                 <div class="options">
                     ${opt('showConflicts', 'Segnala i conflitti', 'Evidenzia le cifre ripetute in riga, colonna o riquadro.')}
                     ${opt('showWrong', 'Segnala le cifre errate', 'Confronta subito ogni cifra con la soluzione.')}
@@ -1262,7 +1341,8 @@
                     <span><kbd>Z</kbd> <kbd>X</kbd> <kbd>C</kbd> <kbd>V</kbd> o <kbd>Spazio</kbd> cambiano modalità</span>
                     <span><kbd>Ctrl</kbd>+<kbd>Z</kbd> annulla · <kbd>Ctrl</kbd>+<kbd>Y</kbd> ripete · <kbd>Canc</kbd> cancella</span>
                     <span>Trascina o usa <kbd>Ctrl</kbd>+clic per selezionare più caselle</span>
-                </div>`;
+                </div>
+                <p class="version">Versione ${APP_VERSION}</p>`;
         } else if (kind === 'library') {
             sheet.innerHTML = `
                 <div class="sheet-head">
@@ -1304,7 +1384,7 @@
             sheet.innerHTML = `
                 <div class="sheet-head"><h2>Aiuti</h2>${closeBtn}</div>
                 <div class="rows">
-                    ${aid('hint', 'target', 'Suggerimento', 'Indica la prossima casella; ripetuto, la rivela.')}
+                    ${aid('hint', 'target', 'Suggerimento', 'Dice quale tecnica cercare e dove; la cifra solo se la chiedi.')}
                     ${aid('verify', 'check', 'Trova gli errori', 'Segnala le cifre diverse dalla soluzione.')}
                     ${aid('autonotes', 'notes', 'Note automatiche', 'Scrive a matita tutte le cifre possibili.')}
                     ${aid('clearnotes', 'erase', 'Azzera le note', 'Cancella tutte le note a matita e al centro.')}
@@ -1349,7 +1429,7 @@
             sheet.innerHTML = `
                 <div class="done-card">
                     <h2>Eliminare?</h2>
-                    <p>«${esc(p ? p.title : '')}» verrà tolto dagli importati insieme ai suoi progressi.</p>
+                    <p>«${esc(p ? p.title : '')}» verrà tolto dalla raccolta insieme ai suoi progressi.</p>
                     <div class="buttons">
                         <button type="button" class="ghost" data-action="library">Annulla</button>
                         <button type="button" class="primary" data-action="delete">Elimina</button>
@@ -1383,9 +1463,9 @@
                     <button type="button" class="ghost" data-action="ask-restart">${icon('restart')}Ricomincia</button>
                     <button type="button" class="ghost" data-action="import">${icon('image')}Importa</button>
                 </div>`;
-            const mine = library.imported();
-            if (mine.length) {
-                html += '<h3>Importati</h3><div class="rows">';
+            for (const [name, mine] of [['Importati', library.imported()], ['Generati', library.generated().reverse()]]) {
+                if (!mine.length) continue;
+                html += `<h3>${name}</h3><div class="rows">`;
                 for (const p of mine) {
                     html += `
                         <div class="row-wrap">
@@ -1437,7 +1517,7 @@
                     <button type="button" class="row" ${p ? `data-open="${esc(p.id)}"` : 'disabled'}>
                         <span class="row-main">
                             <b>${esc(e.title)}${likes[e.id] ? icon('heart') : ''}</b>
-                            <small>${esc(e.author)} · ${levelName(e.level)}</small>
+                            <small>${[esc(e.author), levelName(e.level)].filter(Boolean).join(' · ')}</small>
                             <small>${formatDate(e.date)}</small>
                         </span>
                         <span class="row-side ok">
@@ -1636,6 +1716,11 @@
             return;
         }
         if (ds.del) { pendingDelete = ds.del; return setDialog('delete'); }
+        if (ds.source) {
+            settings.source = ds.source;
+            saveSettings();
+            return setSeg(t.parentElement, SOURCES.indexOf(ds.source), btn => btn.dataset.source === ds.source);
+        }
         if (ds.imp) {
             draft.sel = draft.sel === +ds.imp ? -1 : +ds.imp;
             draft.compare = false;
@@ -1663,6 +1748,9 @@
             case 'delete': return deleteImported();
             case 'aids': return setDialog('aids');
             case 'hint': setDialog('none'); return hint();
+            case 'hint-close': return hideHint();
+            case 'update': save(); return location.reload();
+            case 'update-later': { const bar = els.app.querySelector('.updatebar'); if (bar) bar.remove(); return; }
             case 'autonotes': setDialog('none'); return afterAction(game.autoNotes());
             case 'verify': setDialog('none'); return verify();
             case 'clearnotes': setDialog('none'); return afterAction(game.clearNotes());
@@ -1866,6 +1954,24 @@
             if (p) { openPuzzle(p); setDialog('incoming'); }
             else if (p === false) showToast('Il puzzle di questa sfida non è leggibile.');
         });
+
+        // il service worker avvisa quando sul server ci sono file più recenti
+        if ('serviceWorker' in navigator) {
+            let timer = 0;
+            navigator.serviceWorker.addEventListener('message', e => {
+                if (!e.data || e.data.type !== 'updated') return;
+                clearTimeout(timer);
+                // i file arrivano uno alla volta: si aspetta che abbiano finito
+                timer = setTimeout(() => {
+                    if (els.app.querySelector('.updatebar')) return;
+                    const bar = h('div', 'hintbar updatebar',
+                        '<p>È pronta una versione aggiornata dell\'app.</p><div class="hint-actions">' +
+                        '<button type="button" class="primary" data-action="update">Aggiorna</button>' +
+                        '<button type="button" class="ghost" data-action="update-later">Dopo</button></div>');
+                    els.app.appendChild(bar);
+                }, 1800);
+            });
+        }
 
         document.addEventListener('keydown', onKeyDown);
         document.addEventListener('pointerdown', onPointerDown);

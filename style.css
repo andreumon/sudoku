@@ -423,6 +423,21 @@ h1, h2, h3, p { margin: 0; }
 
 .key:active { transform: scale(.94); }
 .key .num { font-size: 23px; font-weight: 400; line-height: 1; transition: font-size .22s var(--ease); }
+.key .num { transform: translateY(calc(var(--key) * -.08)); }
+.key .left {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: max(3px, calc(var(--key) * .1));
+    text-align: center;
+    font-size: 10.5px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+    transition: color var(--t) ease;
+}
+.key.armed .left { color: inherit; opacity: .75; }
 .key.full { opacity: .32; }
 .key.armed { background: var(--accent); color: var(--on-accent); opacity: 1; }
 .key.erase { color: var(--ink-soft); }
@@ -730,6 +745,35 @@ kbd {
 
 .empty { margin: auto; max-width: 420px; text-align: center; display: flex; flex-direction: column; gap: 12px; color: var(--ink-soft); line-height: 1.5; }
 .empty h1 { color: var(--ink); }
+
+/* ---------- suggerimento in corso ---------- */
+
+.hintbar {
+    position: fixed;
+    left: 50%;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    width: min(440px, calc(100vw - 24px));
+    padding: 14px 14px 12px;
+    border-radius: 16px;
+    background: var(--surface);
+    box-shadow: var(--shadow-l), 0 0 0 1px var(--line);
+    z-index: 15;
+    animation: hint-in var(--t) var(--ease) both;
+    user-select: text;
+    -webkit-user-select: text;
+}
+.hintbar p { font-size: 14.5px; line-height: 1.45; }
+.updatebar { z-index: 16; }
+.version { margin-top: 14px; text-align: center; font-size: 12px; color: var(--ink-faint); }
+.hint-actions { display: flex; gap: 8px; margin-top: 10px; }
+.hint-actions button { flex: 1; height: 40px; }
+@keyframes hint-in { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+.source { display: flex; flex-direction: column; gap: 10px; padding: 4px 0 14px; border-bottom: 1px solid var(--line); }
+.source > span { display: flex; flex-direction: column; gap: 2px; }
+.source b { font-weight: 550; font-size: 14.5px; }
+.source small { color: var(--ink-soft); font-size: 12.5px; }
 
 /* ---------- mi piace ---------- */
 
