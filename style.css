@@ -428,7 +428,7 @@ h1, h2, h3, p { margin: 0; }
 .key.erase { color: var(--ink-soft); }
 
 /* la tastiera anticipa come verrà scritta la cifra */
-.m-corner .num { font-size: 14px; transform: translate(calc(var(--px) * 11px), calc(var(--py) * 11px)); }
+.m-corner .num { font-size: 20px; }
 .m-center .num { font-size: 14px; }
 .m-corner .num, .m-center .num { color: var(--ink-soft); }
 .m-corner .armed .num, .m-center .armed .num { color: inherit; }
@@ -469,7 +469,9 @@ h1, h2, h3, p { margin: 0; }
 .actions button.on { background: var(--sel); color: var(--accent-ink); }
 
 button.tap { animation: tap .34s var(--ease); }
-.primary.tap, .row.tap, .mc.tap, .resume.tap, .like.tap { animation-name: tap-plain; }
+.primary.tap, .row.tap, .mc.tap, .resume.tap, .like.tap, .cap-btn.tap, .pill.tap { animation-name: tap-plain; }
+/* nei selettori a scorrimento la risposta al tocco è la pastiglia che scivola: niente altro sopra */
+.seg button.tap { animation: none; }
 
 .row.aid { justify-content: flex-start; color: var(--ink); }
 .row.aid .ico { color: var(--ink-soft); }
@@ -572,6 +574,7 @@ button.tap { animation: tap .34s var(--ease); }
 
 .scroll { overflow-y: auto; margin: 0 -6px; padding: 0 6px; flex: 1; overscroll-behavior: contain; }
 .scroll h3:first-child { margin-top: 4px; }
+.sheet h3 span { float: right; font-weight: 550; letter-spacing: 0; font-variant-numeric: tabular-nums; }
 
 .options { display: flex; flex-direction: column; overflow-y: auto; }
 
@@ -735,12 +738,24 @@ kbd {
 .like.on { color: var(--like); }
 .like.on .ico { fill: currentColor; animation: like .42s var(--ease); }
 
-.caption .like { margin-left: auto; flex: none; width: 28px; height: 20px; display: grid; place-items: center; opacity: 0; pointer-events: none; transform: scale(.6); }
+.caption .like { flex: none; width: 28px; height: 20px; display: grid; place-items: center; opacity: 0; pointer-events: none; transform: scale(.6); }
 .caption .like.show { opacity: 1; pointer-events: auto; transform: none; }
 .caption .like .ico { width: 18px; height: 18px; }
 
 .like.big { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px; border-radius: 20px; background: var(--well); font-weight: 550; font-size: 14px; margin-bottom: 4px; }
 .like.big.on { color: var(--like); }
+
+.cap-btn { margin-left: auto; flex: none; width: 28px; height: 20px; display: grid; place-items: center; color: var(--ink-faint); transition: color var(--t) ease; }
+.cap-btn .ico { width: 17px; height: 17px; }
+@media (hover: hover) { .cap-btn:hover { color: var(--ink); } }
+
+.pills { display: flex; gap: 8px; margin-bottom: 4px; }
+.pills .like.big { margin-bottom: 0; }
+.pill { display: inline-flex; align-items: center; gap: 7px; height: 40px; padding: 0 16px; border-radius: 20px; background: var(--well); color: var(--ink-soft); font-weight: 550; font-size: 14px; }
+.pill .ico { width: 18px; height: 18px; }
+.versus { padding: 10px 14px; border-radius: 12px; background: var(--same); color: var(--ink) !important; font-variant-numeric: tabular-nums; }
+.field { width: 100%; height: 42px; padding: 0 12px; margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; }
+.field[readonly] { color: var(--ink-soft); font-size: 12.5px; }
 
 /* ---------- statistiche per livello ---------- */
 
@@ -898,7 +913,8 @@ kbd {
     .pad { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .key { height: 72px; border-radius: 14px; }
     .key .num { font-size: 30px; }
-    .m-corner .num, .m-center .num { font-size: 17px; }
+    .m-corner .num { font-size: 25px; }
+    .m-center .num { font-size: 17px; }
     .swatch { width: 34px; height: 34px; border-radius: 10px; }
     .actions { grid-template-columns: repeat(3, 1fr); gap: 8px; }
     .actions button { height: 58px; font-size: 11.5px; gap: 4px; }

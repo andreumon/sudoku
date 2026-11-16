@@ -423,6 +423,11 @@
             });
         }
 
+        /** Cancella tutte le note, a matita e al centro (cifre e colori restano). */
+        clearNotes() {
+            return this.mutate(b => { b.corner.fill(0); b.center.fill(0); });
+        }
+
         /**
          * Suggerimento in due tempi: la prima pressione indica la casella e il perché,
          * la seconda sulla stessa casella scrive la cifra.
@@ -510,6 +515,7 @@
     const THEME_KEY = 'sudoku.theme';
     const IMPORTED_KEY = 'sudoku.imported';
     const LIKES_KEY = 'sudoku.likes';
+    const CHALLENGES_KEY = 'sudoku.challenges';
     const gameKey = id => 'sudoku.game.' + id;
 
     const storage = {
@@ -549,6 +555,7 @@
         target: "<circle cx='12' cy='12' r='8'/><circle cx='12' cy='12' r='3'/>",
         image: "<rect x='4' y='4' width='16' height='16' rx='2.5'/><circle cx='9' cy='9.5' r='1.5'/><path d='m5 17 4.5-4.5 3 3L15 13l4 4'/>",
         trash: "<path d='M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12'/>",
+        share: "<circle cx='6.5' cy='12' r='2.3'/><circle cx='17' cy='6.5' r='2.3'/><circle cx='17' cy='17.5' r='2.3'/><path d='m8.6 11 6.3-3.4M8.6 13l6.3 3.4'/>",
         shuffle: "<path d='M4 7h3c5 0 5 10 10 10h3M4 17h3c1.6 0 2.7-1 3.6-2.3M20 7h-3c-1.6 0-2.7 1-3.6 2.3'/><path d='m17.5 4.5 2.5 2.5-2.5 2.5M17.5 14.5 20 17l-2.5 2.5'/>",
     };
 
@@ -602,12 +609,17 @@
         autoClean: true,
         showTimer: true,
         level: '',
+        name: '',
     };
 
     let imported = storage.load(IMPORTED_KEY) || [];
     if (!Array.isArray(imported)) imported = [];
     let likes = storage.load(LIKES_KEY) || {};
     if (typeof likes !== 'object' || Array.isArray(likes)) likes = {};
+
+    /** Sfide ricevute: id del puzzle → { from, seconds (null se chi sfida non l'aveva finito), hints }. */
+    let challenges = storage.load(CHALLENGES_KEY) || {};
+    if (typeof challenges !== 'object' || Array.isArray(challenges)) challenges = {};
 
     let library = loadLibrary((window.SUDOKU_PUZZLES || []).concat(imported));
     const rebuildLibrary = () => { library = loadLibrary((window.SUDOKU_PUZZLES || []).concat(imported)); };
@@ -798,6 +810,82 @@
         }
     }
 
+    // ---------- sfida: un link porta il puzzle (e il tempo, se c'è) a un amico ----------
+
+    function challengeLink() {
+        const p = game.puzzle, q = new URLSearchParams();
+        q.set('p', p.imported ? p.grid.join('') : p.id);
+        if (p.imported) q.set('n', p.title);
+        if (settings.name.trim()) q.set('da', settings.name.trim());
+        if (game.done) { q.set('t', game.seconds); if (game.hints) q.set('a', game.hints); }
+        return location.href.split('#')[0] + '#sfida?' + q.toString();
+    }
+
+    function challengeText() {
+        const p = game.puzzle;
+        let text = `Ti sfido a questo sudoku: «${p.title}» (${levelName(p.difficulty).toLowerCase()}).`;
+        if (game.done) text += ` Il mio tempo: ${time(game.seconds)}${game.hints ? ` con ${game.hints} ${game.hints === 1 ? 'aiuto' : 'aiuti'}` : ''}.`;
+        return text;
+    }
+
+    async function shareChallenge(useSheet) {
+        const url = challengeLink(), text = challengeText();
+        if (useSheet && navigator.share) {
+            try { await navigator.share({ title: 'Sudoku', text, url }); } catch (e) { }
+            return;
+        }
+        try {
+            await navigator.clipboard.writeText(text + ' ' + url);
+            showToast('Link copiato.');
+        } catch (e) {
+            const field = els.app.querySelector('.ch-link');
+            if (field) { field.focus(); field.select(); }
+            showToast('Copia il link dal riquadro.');
+        }
+    }
+
+    /** Legge una sfida dall'indirizzo (#sfida?...), la registra e restituisce il puzzle da aprire. */
+    function readChallenge() {
+        const m = location.hash.match(/^#sfida\?(.*)$/);
+        if (!m) return null;
+        const q = new URLSearchParams(m[1]);
+        try { history.replaceState(null, '', location.href.split('#')[0]); } catch (e) { }
+        const from = (q.get('da') || 'Un amico').slice(0, 30);
+        const ref = q.get('p') || '';
+        let puzzle = library.find(ref);
+        if (!puzzle && /^[0-9]{81}$/.test(ref)) {
+            puzzle = library.puzzles.find(p => p.grid.join('') === ref);
+            if (!puzzle) {
+                const graded = Logic.grade([...ref].map(Number));
+                if (graded) {
+                    const id = 'imp-' + hashId(ref).slice(1);
+                    imported.push({
+                        id, title: (q.get('n') || 'Sfida di ' + from).slice(0, 60), author: '', difficulty: graded.level,
+                        givens: ref, imported: true, date: new Date().toISOString(),
+                    });
+                    storage.save(IMPORTED_KEY, imported);
+                    rebuildLibrary();
+                    puzzle = library.find(id);
+                }
+            }
+        }
+        if (!puzzle) return false;
+        const t = parseInt(q.get('t'), 10);
+        challenges[puzzle.id] = { from, seconds: t > 0 ? t : null, hints: Math.max(0, parseInt(q.get('a'), 10) || 0) };
+        storage.save(CHALLENGES_KEY, challenges);
+        return puzzle;
+    }
+
+    /** Esito di una sfida a puzzle risolto. */
+    function challengeResult() {
+        const ch = challenges[game.puzzle.id];
+        if (!ch) return '';
+        if (ch.seconds == null) return `<p class="versus">Sfida di <b>${esc(ch.from)}</b>: mandagli il tuo tempo.</p>`;
+        const diff = ch.seconds - game.seconds;
+        const verdict = diff > 0 ? `Hai vinto di ${time(diff)}.` : diff < 0 ? `${esc(ch.from)} vince di ${time(-diff)}.` : 'Pari esatto.';
+        return `<p class="versus"><b>${esc(ch.from)}</b> ${time(ch.seconds)} · <b>tu</b> ${time(game.seconds)}<br>${verdict}</p>`;
+    }
+
     function press(d) {
         // Nessuna casella selezionata: la cifra resta armata e si scrive toccando le caselle.
         if (game.selectedCount === 0) {
@@ -952,6 +1040,7 @@
             : p.sourceUrl ? `di <a href="${esc(p.sourceUrl)}" target="_blank" rel="noopener noreferrer">${esc(p.author)}${icon('link')}</a>`
             : 'di ' + esc(p.author);
         els.caption.innerHTML = `<span class="title">${esc(p.title)}</span><span class="by">${author}</span>` +
+            `<button type="button" class="cap-btn" data-action="challenge" aria-label="Sfida un amico">${icon('share')}</button>` +
             `<button type="button" class="like ${isLiked(p) ? 'on' : ''}" data-action="like" aria-label="Mi piace" aria-pressed="${isLiked(p)}">${icon('heart')}</button>`;
         els.like = els.caption.querySelector('.like');
     }
@@ -968,16 +1057,22 @@
         els.resume = null;
     }
 
-    function syncNotes(container, digits, sameDigit, corner) {
-        const kids = container.children;
+    /** Ogni nota è un elemento legato alla sua cifra: aggiungerne o toglierne una non ridisegna le altre. */
+    function syncNotes(container, digits, sameDigit) {
+        const want = new Set(digits);
+        for (const el of [...container.children]) if (!want.has(+el.dataset.d)) el.remove();
         digits.forEach((d, k) => {
-            let el = kids[k];
-            if (!el) { el = document.createElement('i'); container.appendChild(el); }
-            if (el.textContent !== String(d)) el.textContent = d;
-            const cls = (corner ? `d${d} ` : '') + (d === sameDigit ? 'hit' : '');
-            if (el.className !== cls.trim()) el.className = cls.trim();
+            let el = container.children[k];
+            if (!el || +el.dataset.d !== d) {
+                const made = document.createElement('i');
+                made.dataset.d = d;
+                made.textContent = d;
+                container.insertBefore(made, el || null);
+                el = made;
+            }
+            const cls = `d${d}` + (d === sameDigit ? ' hit' : '');
+            if (el.className !== cls) el.className = cls;
         });
-        while (kids.length > digits.length) container.lastChild.remove();
     }
 
     function updateCell(i, ctx) {
@@ -1133,7 +1228,14 @@
         backdrop.appendChild(sheet);
         backdrop.addEventListener('click', e => { if (e.target === backdrop && kind !== 'import') setDialog('none'); });
         sheet.addEventListener('change', onSettingChange);
-        sheet.addEventListener('input', e => { if (draft && e.target.classList.contains('imp-name')) draft.title = e.target.value; });
+        sheet.addEventListener('input', e => {
+            if (draft && e.target.classList.contains('imp-name')) draft.title = e.target.value;
+            if (e.target.classList.contains('ch-name')) {
+                settings.name = e.target.value;
+                saveSettings();
+                sheet.querySelector('.ch-link').value = challengeLink();
+            }
+        });
 
         const closeBtn = `<button type="button" class="icon-btn" data-action="close" aria-label="Chiudi">${icon('close')}</button>`;
         const g = game;
@@ -1183,7 +1285,11 @@
                         <div><b>${g.hints}</b><small>${g.hints === 1 ? 'aiuto' : 'aiuti'}</small></div>
                         <div><b>${levelName(g.puzzle.difficulty)}</b><small>livello</small></div>
                     </div>
-                    <button type="button" class="like big ${isLiked(g.puzzle) ? 'on' : ''}" data-action="like" aria-pressed="${isLiked(g.puzzle)}">${icon('heart')}<span>Mi piace</span></button>
+                    ${challengeResult()}
+                    <div class="pills">
+                        <button type="button" class="like big ${isLiked(g.puzzle) ? 'on' : ''}" data-action="like" aria-pressed="${isLiked(g.puzzle)}">${icon('heart')}<span>Mi piace</span></button>
+                        <button type="button" class="pill" data-action="challenge">${icon('share')}<span>${challenges[g.puzzle.id] ? 'Rispondi' : 'Sfida'}</span></button>
+                    </div>
                     <div class="buttons">
                         <button type="button" class="ghost" data-action="history">Cronologia</button>
                         <button type="button" class="primary" data-action="random">Nuovo puzzle</button>
@@ -1201,6 +1307,37 @@
                     ${aid('hint', 'target', 'Suggerimento', 'Indica la prossima casella; ripetuto, la rivela.')}
                     ${aid('verify', 'check', 'Trova gli errori', 'Segnala le cifre diverse dalla soluzione.')}
                     ${aid('autonotes', 'notes', 'Note automatiche', 'Scrive a matita tutte le cifre possibili.')}
+                    ${aid('clearnotes', 'erase', 'Azzera le note', 'Cancella tutte le note a matita e al centro.')}
+                </div>`;
+        } else if (kind === 'challenge') {
+            sheet.innerHTML = `
+                <div class="sheet-head"><h2>Sfida un amico</h2>${closeBtn}</div>
+                <p class="lead">${g.done
+                    ? `Mandi «${esc(g.puzzle.title)}» con il tuo tempo, ${time(g.seconds)}: chi apre il link deve batterlo.`
+                    : `Mandi «${esc(g.puzzle.title)}» senza un tempo da battere, perché non l'hai ancora finito. A puzzle risolto potrai mandare il tuo risultato.`}</p>
+                <input class="field ch-name" type="text" maxlength="30" placeholder="Il tuo nome" value="${esc(settings.name)}" aria-label="Il tuo nome" />
+                <input class="field ch-link" type="text" readonly value="${esc(challengeLink())}" aria-label="Link della sfida" />
+                <div class="buttons">
+                    <button type="button" class="ghost" data-action="ch-copy">Copia il link</button>
+                    <button type="button" class="primary" data-action="ch-share">Condividi</button>
+                </div>`;
+        } else if (kind === 'incoming') {
+            const ch = challenges[g.puzzle.id] || { from: 'Un amico', seconds: null, hints: 0 };
+            const target = ch.seconds == null
+                ? 'Non ha ancora un tempo: vince chi lo finisce prima.'
+                : `Tempo da battere: <b>${time(ch.seconds)}</b>${ch.hints ? ` (con ${ch.hints} ${ch.hints === 1 ? 'aiuto' : 'aiuti'})` : ''}.`;
+            const started = g.done ? `<p>L'hai già risolto in ${time(g.seconds)}.</p>` : g.hasProgress ? '<p>L\'avevi già iniziato: puoi continuare o ripartire da zero.</p>' : '';
+            sheet.innerHTML = `
+                <div class="done-card">
+                    <div class="tick">${icon('share')}</div>
+                    <h2>Sfida di ${esc(ch.from)}</h2>
+                    <p>«${esc(g.puzzle.title)}» · ${levelName(g.puzzle.difficulty).toLowerCase()}<br>${target}</p>
+                    ${started}
+                    <div class="buttons">
+                        ${g.done ? '<button type="button" class="ghost" data-action="close">Chiudi</button><button type="button" class="primary" data-action="challenge">Rispondi</button>'
+                        : g.hasProgress ? '<button type="button" class="ghost" data-action="ch-restart">Da zero</button><button type="button" class="primary" data-action="close">Continua</button>'
+                        : '<button type="button" class="primary" data-action="close">Inizia</button>'}
+                    </div>
                 </div>`;
         } else if (kind === 'ideas') {
             sheet.innerHTML = `<div class="sheet-head"><h2>Idee del puzzle</h2>${closeBtn}</div><div class="ideas-body"></div>`;
@@ -1255,7 +1392,7 @@
                             <button type="button" class="row ${p.id === g.puzzle.id ? 'current' : ''}" data-open="${esc(p.id)}">
                                 <span class="row-main">
                                     <b>${esc(p.title)}${isLiked(p) ? icon('heart') : ''}</b>
-                                    <small>${levelName(p.difficulty)} · ${p.clueCount} indizi</small>
+                                    <small>${levelName(p.difficulty)} · ${p.clueCount} numeri</small>
                                 </span>
                                 <span class="row-side ${isDone(p) ? 'ok' : ''}">${status(p)}</span>
                             </button>
@@ -1265,13 +1402,14 @@
                 html += '</div>';
             }
             for (const level of library.levels) {
-                html += `<h3>${levelName(level)}</h3><div class="rows">`;
+                const inLevel = library.byLevel(level);
+                html += `<h3>${levelName(level)} <span>${inLevel.filter(isDone).length}/${inLevel.length}</span></h3><div class="rows">`;
                 for (const p of library.byLevel(level)) {
                     html += `
                         <button type="button" class="row ${p.id === g.puzzle.id ? 'current' : ''}" data-open="${esc(p.id)}">
                             <span class="row-main">
                                 <b>${esc(p.title)}${isLiked(p) ? icon('heart') : ''}</b>
-                                <small>${esc(p.author)} · ${p.clueCount} indizi${p.source ? ' · ' + esc(p.source) : ''}</small>
+                                <small>${esc(p.author)} · ${p.clueCount} numeri${p.source ? ' · ' + esc(p.source) : ''}</small>
                             </span>
                             <span class="row-side ${isDone(p) ? 'ok' : ''}">${status(p)}</span>
                         </button>`;
@@ -1527,6 +1665,11 @@
             case 'hint': setDialog('none'); return hint();
             case 'autonotes': setDialog('none'); return afterAction(game.autoNotes());
             case 'verify': setDialog('none'); return verify();
+            case 'clearnotes': setDialog('none'); return afterAction(game.clearNotes());
+            case 'challenge': return setDialog('challenge');
+            case 'ch-share': return shareChallenge(true);
+            case 'ch-copy': return shareChallenge(false);
+            case 'ch-restart': restart(); return;
             case 'ask-restart': return setDialog('restart');
             case 'restart': return restart();
             case 'random': return randomPuzzle();
@@ -1712,7 +1855,17 @@
             if (!library.levels.includes(settings.level)) settings.level = library.levels[0];
             puzzle = pickForLevel(settings.level);
         }
-        openPuzzle(puzzle, false);
+        const challenged = readChallenge();
+        openPuzzle(challenged || puzzle, false);
+        if (challenged) setDialog('incoming');
+        else if (challenged === false) showToast('Il puzzle di questa sfida non è leggibile.');
+
+        // un link di sfida aperto mentre l'app è già in uso
+        window.addEventListener('hashchange', () => {
+            const p = readChallenge();
+            if (p) { openPuzzle(p); setDialog('incoming'); }
+            else if (p === false) showToast('Il puzzle di questa sfida non è leggibile.');
+        });
 
         document.addEventListener('keydown', onKeyDown);
         document.addEventListener('pointerdown', onPointerDown);

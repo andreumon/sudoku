@@ -461,8 +461,9 @@
     function grade(givens, declared) {
         const a = analyze(givens);
         if (!a.valid) return null;
-        const d = LEVELS.indexOf(String(declared || '').toLowerCase());
-        const blended = d < 0 ? a.level : 0.6 * a.level + 0.4 * d;
+        // `declared` può essere il nome di un livello oppure un numero continuo tra 0 e 3
+        const d = typeof declared === 'number' ? declared : LEVELS.indexOf(String(declared || '').toLowerCase());
+        const blended = d < 0 || Number.isNaN(d) ? a.level : 0.6 * a.level + 0.4 * d;
         return { level: LEVELS[Math.max(0, Math.min(3, Math.round(blended)))], computed: a.level, cost: a.cost, maxTier: a.maxTier, analysis: a };
     }
 
@@ -493,15 +494,15 @@
         const mirH = map(i => (8 - ROW(i)) * 9 + COL(i));
         const diag = map(i => COL(i) * 9 + ROW(i));
         const anti = map(i => (8 - COL(i)) * 9 + (8 - ROW(i)));
-        if (rot90 && mirV) out.push('La disposizione dei dati ha simmetria completa: resta uguale ruotando o specchiando la griglia in qualunque modo.');
-        else if (rot90) out.push('La disposizione dei dati è una girandola: resta uguale a ogni quarto di giro.');
-        else if (mirV && mirH) out.push('La disposizione dei dati è specchiata sia in orizzontale sia in verticale.');
-        else if (diag && anti) out.push('La disposizione dei dati è specchiata rispetto a entrambe le diagonali.');
-        else if (mirV) out.push('La disposizione dei dati è specchiata tra metà sinistra e metà destra.');
-        else if (mirH) out.push('La disposizione dei dati è specchiata tra metà alta e metà bassa.');
-        else if (diag || anti) out.push('La disposizione dei dati è specchiata rispetto a una diagonale.');
-        else if (rot180) out.push('La disposizione dei dati resta uguale capovolgendo la griglia (mezzo giro).');
-        else out.push('La disposizione dei dati non è simmetrica: la forma è stata scelta per un altro motivo, cerca un disegno.');
+        if (rot90 && mirV) out.push('La disposizione dei numeri ha simmetria completa: resta uguale ruotando o specchiando la griglia in qualunque modo.');
+        else if (rot90) out.push('La disposizione dei numeri è una girandola: resta uguale a ogni quarto di giro.');
+        else if (mirV && mirH) out.push('La disposizione dei numeri è specchiata sia in orizzontale sia in verticale.');
+        else if (diag && anti) out.push('La disposizione dei numeri è specchiata rispetto a entrambe le diagonali.');
+        else if (mirV) out.push('La disposizione dei numeri è specchiata tra metà sinistra e metà destra.');
+        else if (mirH) out.push('La disposizione dei numeri è specchiata tra metà alta e metà bassa.');
+        else if (diag || anti) out.push('La disposizione dei numeri è specchiata rispetto a una diagonale.');
+        else if (rot180) out.push('La disposizione dei numeri resta uguale capovolgendo la griglia (mezzo giro).');
+        else out.push('La disposizione dei numeri non è simmetrica: la forma è stata scelta per un altro motivo, cerca un disegno.');
 
         // simmetria dei valori
         let same = true, comp = true, pairs = 0;
@@ -511,8 +512,8 @@
             if (g[i] !== g[80 - i]) same = false;
             if (g[i] + g[80 - i] !== 10) comp = false;
         }
-        if (pairs >= 6 && same) out.push('Anche i valori sono simmetrici: ogni dato ha la stessa cifra nella posizione opposta rispetto al centro.');
-        if (pairs >= 6 && comp) out.push('Ogni dato e il suo opposto rispetto al centro sommano 10: la simmetria riguarda anche i valori.');
+        if (pairs >= 6 && same) out.push('Anche i valori sono simmetrici: ogni numero ha un gemello uguale nella posizione opposta rispetto al centro.');
+        if (pairs >= 6 && comp) out.push('Ogni numero e il suo opposto rispetto al centro sommano 10: la simmetria riguarda anche i valori.');
 
         // conteggi
         const perDigit = new Array(10).fill(0);
@@ -523,15 +524,16 @@
             else if (perDigit[d] >= 6) heavy.push(d);
         }
         const used = 9 - missing.length;
-        if (missing.length === 1) out.push(`Tra i dati il ${missing[0]} non compare mai: tutte e nove le copie vanno dedotte.`);
-        else if (missing.length > 1) out.push(`I dati usano solo ${used} cifre diverse: ${list(missing)} non compaiono mai.`);
-        if (heavy.length) out.push(`${heavy.length === 1 ? 'Il ' + heavy[0] + ' è già quasi tutto' : 'Le cifre ' + list(heavy) + ' sono già quasi tutte'} sulla griglia: ${heavy.length === 1 ? 'è il filo' : 'sono i fili'} più corti da tirare.`);
+        if (missing.length === 1) out.push(`Tra i numeri di partenza il ${missing[0]} non compare mai: tutte e nove le copie vanno dedotte.`);
+        else if (missing.length > 1) out.push(`I numeri di partenza usano solo ${used} cifre diverse: ${list(missing)} non compaiono mai.`);
+        if (heavy.length === 1) out.push(`Il ${heavy[0]} è già quasi tutto sulla griglia: è il filo più corto da tirare.`);
+        else if (heavy.length) out.push(`Le cifre ${list(heavy)} sono già quasi tutte sulla griglia: sono i fili più corti da tirare.`);
 
         const per = (from) => { const n = []; for (let u = 0; u < 9; u++) n.push(UNITS[from + u].filter(has).length); return n; };
         const rows = per(0), cols = per(9), boxes = per(18);
         const uniform = a => a.every(x => x === a[0]);
         if (uniform(rows) && uniform(cols) && uniform(boxes))
-            out.push(`Ogni riga, colonna e riquadro contiene esattamente ${rows[0]} dati: nessuna zona parte avvantaggiata.`);
+            out.push(`Ogni riga, colonna e riquadro contiene esattamente ${rows[0]} numeri: nessuna zona parte avvantaggiata.`);
         else {
             const emptyB = [], fullB = [];
             boxes.forEach((n, b) => { if (n === 0) emptyB.push(BOX_NAMES[b]); else if (n >= 6) fullB.push(BOX_NAMES[b]); });
@@ -540,7 +542,7 @@
             const emptyL = [];
             rows.forEach((n, r) => { if (n === 0) emptyL.push(`la riga ${r + 1}`); });
             cols.forEach((n, c) => { if (n === 0) emptyL.push(`la colonna ${c + 1}`); });
-            if (emptyL.length) out.push(`Non c'è alcun dato ${emptyL.length === 1 ? 'lungo ' + emptyL[0] : 'lungo ' + list(emptyL)}.`);
+            if (emptyL.length) out.push(`Non c'è alcun numero lungo ${list(emptyL)}.`);
         }
 
         // sequenze ordinate lungo righe e colonne
@@ -562,10 +564,10 @@
         const dA = [], dB = [];
         for (let k = 0; k < 9; k++) { if (has(k * 10)) dA.push(g[k * 10]); if (has(k * 8 + 8)) dB.push(g[k * 8 + 8]); }
         for (const [d, name] of [[dA, 'principale'], [dB, 'secondaria']])
-            if (d.length >= 6 && new Set(d).size <= 2) out.push(`Sulla diagonale ${name} i dati ripetono ${new Set(d).size === 1 ? 'sempre la stessa cifra' : 'due sole cifre'}.`);
+            if (d.length >= 6 && new Set(d).size <= 2) out.push(`Sulla diagonale ${name} i numeri ripetono ${new Set(d).size === 1 ? 'sempre la stessa cifra' : 'due sole cifre'}.`);
 
-        out.unshift(clues <= 22 ? `Solo ${clues} dati: pochissimi, ogni cifra pesa.` :
-            clues >= 32 ? `${clues} dati: molti, quindi il difficile non è la scarsità di informazioni.` : `${clues} dati.`);
+        out.unshift(clues <= 22 ? `Solo ${clues} numeri di partenza: pochissimi, ognuno pesa.` :
+            clues >= 32 ? `${clues} numeri di partenza: molti, quindi la difficoltà non sta nella scarsità di informazioni.` : `${clues} numeri di partenza.`);
         return out;
     }
 

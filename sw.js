@@ -3,7 +3,7 @@
 // così una nuova versione pubblicata compare alla seconda apertura.
 'use strict';
 
-const CACHE = 'sudoku-v1';
+const CACHE = 'sudoku-v2';
 const FILES = [
     './', 'index.html', 'style.css', 'app.js', 'logic.js', 'ocr.js', 'puzzles.js',
     'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',

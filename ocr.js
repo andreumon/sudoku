@@ -28,6 +28,19 @@
                     for (let xx = ax; xx < bx; xx++) { sum += mask[(y0 + yy) * w + x0 + xx]; n++; }
                 out[y * NW + x] = n ? sum / n : 0;
             }
+        // leggera sfocatura: rende il confronto tollerante a spessori e allineamenti diversi
+        const soft = new Float32Array(NW * NH);
+        for (let y = 0; y < NH; y++)
+            for (let x = 0; x < NW; x++) {
+                let sum = 0;
+                for (let dy = -1; dy <= 1; dy++)
+                    for (let dx = -1; dx <= 1; dx++) {
+                        const xx = x + dx, yy = y + dy;
+                        if (xx >= 0 && yy >= 0 && xx < NW && yy < NH) sum += out[yy * NW + xx] * (dx === 0 && dy === 0 ? 4 : dx === 0 || dy === 0 ? 2 : 1);
+                    }
+                soft[y * NW + x] = sum / 16;
+            }
+        out.set(soft);
         let norm = 0;
         for (const v of out) norm += v * v;
         norm = Math.sqrt(norm) || 1;
@@ -78,6 +91,32 @@
                     if (seen.has(key)) continue; // carattere non installato: stesso disegno di un altro
                     seen.add(key);
                     templates.push({ digit: d, vec });
+                }
+        // l'1 "con il piede" (DejaVu, Verdana, molti giornali) spesso manca tra i caratteri del telefono: lo si disegna a mano
+        for (const lw of [5, 8, 11])
+            for (const foot of [11, 15])
+                for (const flag of [9, 14]) {
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(0, 0, S, S);
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = lw;
+                    ctx.lineCap = 'butt';
+                    ctx.lineJoin = 'miter';
+                    ctx.beginPath();
+                    ctx.moveTo(48 - flag, 25 + flag * .75); ctx.lineTo(48, 25); ctx.lineTo(48, 71);
+                    ctx.moveTo(48 - foot, 71 - lw / 2); ctx.lineTo(48 + foot, 71 - lw / 2);
+                    ctx.stroke();
+                    const data = ctx.getImageData(0, 0, S, S).data;
+                    const mask = new Uint8Array(S * S);
+                    let x0 = S, y0 = S, x1 = -1, y1 = -1;
+                    for (let y = 0; y < S; y++)
+                        for (let x = 0; x < S; x++)
+                            if (data[(y * S + x) * 4] < 128) {
+                                mask[y * S + x] = 1;
+                                if (x < x0) x0 = x; if (x > x1) x1 = x;
+                                if (y < y0) y0 = y; if (y > y1) y1 = y;
+                            }
+                    templates.push({ digit: 1, vec: normalize(mask, S, x0, y0, x1, y1) });
                 }
         return templates;
     }
